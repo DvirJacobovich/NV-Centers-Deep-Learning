@@ -81,7 +81,7 @@ for smp in range(NUM_SIM_SAMPS):
     x = 1
 
 batch_size = 10
-tr_params = {'batch_size': batch_size, 'shuffle': True}
+tr_params = {'batch_size': batch_size, 'shuffle': False}
 
 sig_meas_set = simulated_NV_DataSet.simulated_NV_DataSet(sig_measurements_tensors, target_tensors)
 smp_mtx_set = simulated_NV_DataSet.simulated_NV_DataSet(smp_mtx_tensors, target_tensors)
