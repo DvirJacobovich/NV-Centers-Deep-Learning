@@ -6,11 +6,16 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 def tensor_to_plt_im(im: torch.Tensor):
     return im.permute(1, 2, 0)
 
+
 def NV_plots(net_rec, target):
-    plt.plot(net_rec, label='Net rec', color= 'r')
-    plt.title('Net Lorentians Reconstruction')
-    plt.plot(target, label= 'Target', color= 'b')
-    plt.title('Target Lorentians')
+    plt.plot(torch.squeeze(net_rec), label='Net rec', color='r')
+    plt.plot(torch.squeeze(target), label='Target', color='b')
+    # plt.title('Target Lorentians')
+    plt.title('Net Recs and Target Lorentzians')
+
+    plt.legend()
+    plt.show()
+
 
 def NV_plot(net_rec):
     fig = plt.figure()

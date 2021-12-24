@@ -3,20 +3,12 @@ import time
 import scipy.io as sio
 import torch
 import torch.nn as nn
-import NV_real_data_model
 import torch.optim as optim
+import NV_plots
 import simulated_NV_DataSet
 import NV_simulateed_data_model
-import NV_normalize_data as nr
-import mat73
-from mat4py import loadmat
-import scipy.io
-import numpy as np
-import h5py
-
+import validation_generator as vg
 from matplotlib import pyplot as plt
-from torchvision import transforms
-import torch.nn.functional as f
 
 ##
 # Simlualated data: inputs: in CS staruct: smp_mtx (100x200), basis_mtx (200x200) (need to multiply these two to get the
@@ -29,8 +21,7 @@ import torch.nn.functional as f
 
 sim_data_loc = r'C:\Users\owner\Desktop\Dvir\NV-centers Compressed learning\NV-centers CompressedLearning-20211121T154621Z-001\compressedLearning-main\matlab_code\COmpSENS'
 
-NUM_SIM_SAMPS = 500
-
+NUM_SIM_SAMPS = 100  # max 1501
 TANH = nn.Tanh()
 
 use_cuda = torch.cuda.is_available()
@@ -80,34 +71,36 @@ for smp in range(NUM_SIM_SAMPS):
 
     x = 1
 
-batch_size = 10
+batch_size = 32
 tr_params = {'batch_size': batch_size, 'shuffle': False}
 
 sig_meas_set = simulated_NV_DataSet.simulated_NV_DataSet(sig_measurements_tensors, target_tensors)
 smp_mtx_set = simulated_NV_DataSet.simulated_NV_DataSet(smp_mtx_tensors, target_tensors)
 physical_set = simulated_NV_DataSet.simulated_NV_DataSet(physical_params_tensors, target_tensors)
 
-training_generator1 = torch.utils.data.DataLoader(sig_meas_set, **tr_params)
-training_generator2 = torch.utils.data.DataLoader(smp_mtx_set, **tr_params)
-training_generator3 = torch.utils.data.DataLoader(physical_set, **tr_params)
+tr_gen1 = torch.utils.data.DataLoader(sig_meas_set, **tr_params)
+tr_gen2 = torch.utils.data.DataLoader(smp_mtx_set, **tr_params)
+tr_gen3 = torch.utils.data.DataLoader(physical_set, **tr_params)
 
+valid_gen1, valid_gen2, valid_gen3 = vg.validation_generator()
+# num epochs
 max_epochs = 5
-
 # Learning rate for optimizers
 lr = 0.0001  # 0.0002
 # Beta1 hyper-param for Adam optimizers
 beta1 = 0.9
 
-training_generator = zip(training_generator1, training_generator2, training_generator3)
+training_gen = zip(tr_gen1, tr_gen2, tr_gen3)
+validation_gen = zip(valid_gen1, valid_gen2, valid_gen3)
 
 
 def train(net: NV_simulateed_data_model, criterion=nn.MSELoss()):
     optimizer = optim.Adam(net.parameters(), lr=lr, betas=(beta1, 0.999))
-    # losses, gen_lst, iters = [], [], 0
+    losses, gen_lst = [], []
     # Loop over epochs
     for epoch in range(max_epochs):
         # Training
-        training_generator = zip(training_generator1, training_generator2, training_generator3)
+        training_generator = zip(tr_gen1, tr_gen2, tr_gen3)
         for i, ((sig_meas_batch, target_batch), (smp_mtx_batch, _), (physics_batch, _)) in enumerate(
                 training_generator):
             optimizer.zero_grad()
@@ -117,7 +110,7 @@ def train(net: NV_simulateed_data_model, criterion=nn.MSELoss()):
                 device), physics_batch.to(device)
             target_batch = target_batch.to(device)
             target_batch = torch.transpose(target_batch, dim0=2, dim1=1)
-            target_batch = TANH(target_batch)
+            # target_batch = TANH(target_batch)
 
             net_rec = net(sig_meas_batch, smp_mtx_batch, physics_batch)
             err = criterion(net_rec, target_batch)
@@ -130,12 +123,30 @@ def train(net: NV_simulateed_data_model, criterion=nn.MSELoss()):
                 print('Epoch num %d, out of %d. Batch num %d, out of %d. \tLoss %.22f\t' % (
                     epoch, max_epochs, i, (NUM_SIM_SAMPS / batch_size), err.item()))
 
+            losses.append(err.item())
+
+            # loss_file = open("losses.txt", "w")  # write losses to text file
+            # for element in losses:
+            #     loss_file.write(str(element) + "\n")
+            # loss_file.close()
+
             # Validation
-            # with torch.set_grad_enabled(False):
-            #     for local_batch, local_labels in validation_generator:
-            #         # Transfer to GPU
-            #         local_batch, local_labels = local_batch.to(device), local_labels.to(device)
-            #         net_rec = net(local_batch)
+            with torch.set_grad_enabled(False):
+                validation_generator = zip(valid_gen1, valid_gen2, valid_gen3)
+                for i, ((sig_meas_valid, target_valid), (smp_mtx_valid, _), (physics_valid, _)) in enumerate(
+                        validation_generator):
+                    sig_meas_valid, smp_mtx_valid, physics_valid = sig_meas_valid.to(device), smp_mtx_valid.to(
+                        device), physics_valid.to(device)
+                    target_valid = target_valid.to(device)
+                    target_valid = torch.transpose(target_valid, dim0=2, dim1=1)
+                    # target_valid = TANH(target_valid)
+
+                    net_rec = net(sig_meas_valid, smp_mtx_valid, physics_valid)
+                    NV_plots.NV_plots(net_rec, target_valid)
+
+    plt.plot(losses)
+    plt.show()
+
 
 if __name__ == '__main__':
     AE = NV_simulateed_data_model.NV_simulateed_data_model().to(device)

@@ -6,6 +6,7 @@ def norm_measures(measure_tensor):
     No need to keep the mean and std since measure is the input.
     :param measure_tensor:
     """
+    
     meas = torch.squeeze(measure_tensor)
     meas_scaled = meas - torch.mean(meas)
     x1_scaled_normed = meas_scaled / torch.std(meas)
